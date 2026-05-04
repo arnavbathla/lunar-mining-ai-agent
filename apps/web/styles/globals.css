@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #fafaf7;
+  color: #0b0c0d;
+}
+
+body {
+  font-feature-settings: "ss01", "cv05";
+}
+
+.card {
+  @apply bg-paper border border-line rounded-lg shadow-card;
+}
+
+.section-title {
+  @apply text-[11px] uppercase tracking-[0.14em] text-muted font-semibold;
+}
+
+.kbd {
+  @apply font-mono text-[11px] bg-bone border border-line rounded px-1.5 py-0.5;
+}
+
+.status-pill {
+  @apply inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full border;
+}
