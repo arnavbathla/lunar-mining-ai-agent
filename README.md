@@ -6,15 +6,140 @@
 >
 > **Simulation only. Not flight critical. No hardware control.**
 
-## What this is
+This README explains **what problem** the product addresses, **how it solves
+it** (product + engineering), **how the Claude AI agent works step by step**,
+and includes **screenshots** of the running UI. Technical architecture,
+environment variables, and API tables follow below.
 
-Lunar MineOps AI OS is a narrow-scope, fully functional MVP that closes one
-end-to-end loop:
+---
+
+## Screenshots
+
+### Landing page & system status
+
+Backend connectivity, demo mission seed, and whether **Anthropic Claude** is
+configured (`ANTHROPIC_API_KEY` in `apps/api/.env`). Deterministic features work
+without a key; agent endpoints require one.
+
+![Landing page with system status panel](docs/screenshots/01-landing-system-status.png)
+
+### Mission dashboard — brief & agent entry point
+
+The Shackleton Ridge ISRU Demo brief (targets, duration, slope limit, battery
+margin). **Run Mission Readiness Analysis** kicks off the server-side Claude
+tool-use loop when the API key is present; otherwise you still get seeded site,
+plan, and simulation via REST.
+
+![Mission dashboard — mission brief](docs/screenshots/02-mission-dashboard.png)
+
+### Readiness verdict & executive recommendation
+
+Five-dimension readiness cards (**Site Mineability**, **Production Target**,
+**Power Budget**, **Autonomy Risk**, **Mission Readiness**) plus the executive
+summary strip. With `ANTHROPIC_API_KEY`, Claude fills **Executive
+Recommendation**, **source grounding**, **next actions**, and **tool-call
+trace**. Without the key, deterministic scoring still populates verdicts after
+a plan + simulation exist.
+
+![Readiness verdict and executive recommendation](docs/screenshots/03-readiness-verdict-and-executive.png)
+
+### Lunar site map (mineability layer)
+
+Interactive **30×30** polar grid with layer toggles (mineability, resource,
+hazard, illumination, slope, comms). Useful for visually grounding dig zones,
+placements, and hazard corridors alongside the numeric simulation.
+
+![Lunar site map — mineability layer](docs/screenshots/04-lunar-site-map-mineability.png)
+
+---
+
+## The problem
+
+Autonomous lunar ISRU missions combine **terrain**, **power**, **mobility**,
+**processing**, **autonomy**, and **failure modes** (dust, thermal, comms,
+battery). Teams often decide on architectures using slides or partial analyses,
+then discover integration issues **after** hardware commitment.
+
+The core question this MVP attacks:
+
+> Before spending millions on hardware, can we **show evidence** that a
+> specific excavation-to-processing concept **closes operationally** under
+> stated constraints—using **traceable** inputs (public NASA/PDS context),
+> **reproducible** terrain and simulation, and **reviewable** outputs
+> (verdicts, telemetry, anomalies, approvals, reports)?
+
+---
+
+## The solution (product)
+
+Lunar MineOps AI OS is a **single closed-loop product**:
+
+1. **Ingest & cache** public NASA/PDS pages as structured, timestamped context.
+2. **Seed** a demo mission on a **deterministic synthetic** lunar polar site.
+3. **Plan** a balanced excavation/processing schedule and **draft autonomy
+   artifacts** (behavior tree, ROS-shaped messages, state machine, runbook).
+4. **Simulate** 168 hours hour-by-hour with power, production, battery, and
+   **deterministic anomalies**.
+5. **Score readiness** across five dimensions with an overall **Go / Conditional
+   Go / No-Go** style outcome.
+6. Use **Claude with tools** (server-side only) to run **readiness analysis**,
+   **anomaly response**, **mission report**, and optional **source refresh**—only
+   invoking backend functions so numbers stay honest.
+7. Support **human approvals** when an anomaly path requires operator sign-off.
+8. Export a **markdown mission readiness report**.
+
+The UI ties this together in one mission dashboard; the API supports the same
+story without the frontend.
+
+---
+
+## How the AI agent works (step by step)
+
+### A. What you do in the UI
+
+1. Open the app — health panel shows backend **online** and Claude **configured
+   or missing key**.
+2. **Launch Demo Mission** — seeds mission, 30×30 site, assets, and sources.
+3. **Run Mission Readiness Analysis** (requires API key) — Claude follows the
+   scripted tool order in `app/agents/prompts.py`: load source + mission
+   context, score mineability, build plan, generate autonomy artifacts, run the
+   deterministic simulator, pull simulation details, then return structured JSON
+   (verdict narrative, grounding, next actions).
+4. Review **readiness cards**, **source evidence**, **map**, **plan & risks**,
+   **simulation charts**, **anomalies**, **approvals**, **report**.
+5. **Ask Claude for Response** on an anomaly — Claude reads telemetry + uses
+   `recommend_anomaly_response`; may create an **approval** when required.
+6. **Generate Mission Readiness Report** — Claude orchestrates context +
+   `generate_mission_report` tool; download `.md` when available.
+
+### B. What happens on the server
+
+1. FastAPI receives `/agent/*` requests **only** if `ANTHROPIC_API_KEY` is set
+   (otherwise HTTP 400).
+2. `agent_loop.run_agent_loop` calls the Anthropic Messages API with
+   `CORE_SYSTEM_PROMPT`, the task-specific user prompt, and **tool definitions**
+   from `tool_registry.py`.
+3. Each turn: if Claude emits `tool_use`, the backend runs `execute_tool` → real
+   services (`planning_service`, `simulation.engine`, `readiness_service`,
+   `report_service`, etc.). Results are returned as `tool_result` blocks (max **8**
+   iterations).
+4. The final assistant message is parsed for JSON (typically inside a Markdown
+   fenced code block) when required; responses are persisted as **`AgentRun`**
+   rows for audit.
+
+**Security model:** the browser talks only to FastAPI. **No API key** is exposed
+to Next.js or any `NEXT_PUBLIC_*` variable.
+
+---
+
+## What this is (data-flow snapshot)
+
+Lunar MineOps AI OS is a narrow-scope MVP that closes one end-to-end loop:
 
 ```
 NASA / PDS public source context  →  seeded lunar ISRU mission
         →  synthetic 30×30 polar site  →  mineability scoring
-        →  Claude-generated balanced plan  →  deterministic 168 h simulation
+        →  Claude-guided balanced plan  →  deterministic 168 h simulation
         →  five-dimension readiness verdict (Go / Conditional Go / No-Go)
         →  Claude anomaly response  →  human approvals
         →  Claude-generated mission readiness report (markdown download)
@@ -22,17 +147,6 @@ NASA / PDS public source context  →  seeded lunar ISRU mission
 
 The Claude agent runs **server-side only**. The frontend never sees the
 Anthropic API key.
-
-## What problem this solves
-
-> "Before we spend millions launching hardware, can we validate whether this
-> autonomous lunar excavation-to-processing concept works under terrain,
-> power, mobility, processing, autonomy, and anomaly constraints?"
-
-The product produces operator-facing evidence (readiness verdict, telemetry,
-risk register, autonomy artifacts, anomaly responses, mission report) so a
-mission readiness review board can decide on the concept before hardware
-launch.
 
 ## Scope
 
@@ -180,7 +294,7 @@ Open http://localhost:3000.
 ### Docker
 
 ```
-ANTHROPIC_API_KEY=sk-... docker compose up --build
+ANTHROPIC_API_KEY=<your-api-key> docker compose up --build
 ```
 
 Brings up `api` (port 8000, SQLite volume `api_data`) and `web` (port 3000).
