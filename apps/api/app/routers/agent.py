@@ -33,6 +33,40 @@ from app.services.mission_service import get_mission
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
+def _coerce_next_actions(items: Any) -> list[str]:
+    """Normalize Claude's next_actions output into a list of strings.
+
+    Claude sometimes returns objects like {"priority": 1, "action": "..."}
+    instead of plain strings. We accept either shape and surface a clean
+    list[str] to the frontend.
+    """
+    if not items:
+        return []
+    if not isinstance(items, list):
+        items = [items]
+    out: list[str] = []
+    for item in items:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            priority = item.get("priority")
+            action = (
+                item.get("action")
+                or item.get("description")
+                or item.get("title")
+                or item.get("text")
+            )
+            if action and priority is not None:
+                out.append(f"{priority}. {action}")
+            elif action:
+                out.append(str(action))
+            else:
+                out.append(", ".join(f"{k}: {v}" for k, v in item.items()))
+        else:
+            out.append(str(item))
+    return out
+
+
 def _require_anthropic() -> None:
     if not settings.anthropic_configured:
         raise HTTPException(
@@ -121,7 +155,7 @@ def run_readiness(
         readiness=final.get("readiness"),
         executive_recommendation=final.get("executive_recommendation", ""),
         source_grounding_summary=final.get("source_grounding_summary", ""),
-        next_actions=final.get("next_actions", []),
+        next_actions=_coerce_next_actions(final.get("next_actions")),
         model=result["model"],
         created_at=result["created_at"],
     )

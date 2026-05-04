@@ -1,7 +1,6 @@
 """Balanced mission planning service."""
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -538,5 +537,3 @@ def autonomy_artifacts_for_mission(
         db.flush()
     return fresh
 
-
-def _ = json  # keep import used in case of future serialization helpers
